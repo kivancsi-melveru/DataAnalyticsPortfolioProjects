@@ -1,0 +1,140 @@
+SELECT* FROM [PortfolioProject].[dbo].[CovidDeaths]
+WHERE location = 'Spain'
+order by 1, 2
+
+
+SELECT* FROM [PortfolioProject].[dbo].[CovidVaccinations]
+WHERE location = 'Spain'
+order by 1, 2
+
+ /* convert data type 
+SELECT CONVERT(varchar(50), getdate(), 101) */
+
+/* delete column
+ALTER TABLE [PortfolioProject].[dbo].[CovidVaccinations]
+DROP COLUMN date2;*/
+
+
+SELECT Location, date, total_cases, new_cases, total_deaths, population
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ ORDER BY 1,2
+
+ -- Total Cases vs Total Deaths --
+ SELECT MAX(total_cases), MAX(total_deaths), (1.0 *total_deaths/total_cases)*100 AS DeathRate
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ ORDER BY 1,2
+
+
+ -- Total Cases vs Total Deaths BY LOCATION DAILY --
+SELECT location, date, total_cases, total_deaths, (1.0 *total_deaths/total_cases)*100 AS DeathRate
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE location = 'France'
+ ORDER BY 1,2
+ 
+
+  -- Total Cases vs Total Deaths BY LOCATION  --
+SELECT location, MAX(total_cases), MAX(total_deaths), (1.0 *MAX(total_deaths)/MAX(total_cases))*100 AS DeathRate
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE location = 'France'
+ ORDER BY 1,2
+
+
+ -- Total Cases vs Population --
+SELECT location, date, total_cases, population, (1.0 *total_cases/population)*100 AS PoopulationDeathRate
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE location = 'France'
+ ORDER BY 1,2
+
+
+  -- Highest infection rate vs Population --
+SELECT location, MAX(total_cases) AS MaxCases, population, MAX((1.0 *total_cases/population))*100 AS PercPopulationInfected
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ GROUP BY location, population
+ ORDER BY PercPopulationInfected DESC
+
+
+--- Highest DeathRate per population----
+SELECT location, MAX(total_deaths) AS MaxDeaths, population, MAX((1.0 *total_deaths/population))*100 AS PercPopulationDeaths
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE continent is not null
+ GROUP BY location, population
+ ORDER BY PercPopulationDeaths DESC
+
+ --- Total death by continent----
+SELECT continent, MAX(total_deaths) AS MaxDeaths
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE continent is not null
+ GROUP BY continent
+ ORDER BY MaxDeaths DESC
+
+  --- Total death by continent----
+SELECT location, MAX(total_deaths) AS MaxDeaths
+ FROM [PortfolioProject].[dbo].[CovidDeaths]
+ WHERE continent is null
+ GROUP BY location
+ ORDER BY MaxDeaths DESC
+
+   -- Total population vaccinated  --
+SELECT death.location, MAX(vaccin.total_vaccinations) AS MaxVaccinated, death.population, MAX(vaccin.total_vaccinations/death.population) AS VaccinatedPopulation
+ FROM [PortfolioProject].[dbo].[CovidDeaths] death
+ JOIN [PortfolioProject].[dbo].[CovidVaccinations] vaccin
+    ON death.location = vaccin.location
+    AND death.date = vaccin.date 
+ WHERE death.continent is not null
+ GROUP BY death.location, death.population
+ ORDER BY VaccinatedPopulation desc
+
+
+
+---CTI
+With PopvsVac (location, date, new_vaccinations, population, RollingTotalVaccination )
+AS 
+(
+   -- Total population vaccinated  --
+SELECT death.location, death.date, vaccin.new_vaccinations, death.population, SUM(vaccin.new_vaccinations) OVER (Partition by death.location order by death.location, death.date) AS RollingTotalVaccination
+ FROM [PortfolioProject].[dbo].[CovidDeaths] death
+ JOIN [PortfolioProject].[dbo].[CovidVaccinations] vaccin
+    ON death.location = vaccin.location
+    AND death.date = vaccin.date 
+ WHERE death.continent is not null 
+    AND vaccin.new_vaccinations is not null
+ --GROUP BY death.location, death.population, vaccin.new_vaccinations, death.date
+ --ORDER BY 2,3
+)
+SELECT * , (RollingTotalVaccination/population)*100 AS VaccinatedRate 
+FROM PopvsVac
+
+
+
+---TEMP TABLE
+DROP TABLE IF EXISTS #PercPopulationVaccinated
+CREATE TABLE #PercPopulationVaccinated
+(
+    location NVARCHAR(255), 
+    date date, 
+    new_vaccinations float, 
+    population numeric, 
+    RollingTotalVaccination numeric
+)
+INSERT INTO #PercPopulationVaccinated
+SELECT death.location, death.date, vaccin.new_vaccinations, death.population, SUM(vaccin.new_vaccinations) OVER (Partition by death.location order by death.location, death.date) AS RollingTotalVaccination
+ FROM [PortfolioProject].[dbo].[CovidDeaths] death
+ JOIN [PortfolioProject].[dbo].[CovidVaccinations] vaccin
+    ON death.location = vaccin.location
+    AND death.date = vaccin.date 
+ WHERE death.continent is not null 
+    AND vaccin.new_vaccinations is not null
+SELECT * , (RollingTotalVaccination/population)*100 AS VaccinatedRate 
+FROM #PercPopulationVaccinated
+
+
+----CREATINNG VIEW for VISUALISATIONS
+CREATE VIEW PercPopulationVaccinated AS
+SELECT death.location, death.date, vaccin.new_vaccinations, death.population, SUM(vaccin.new_vaccinations) OVER (Partition by death.location order by death.location, death.date) AS RollingTotalVaccination
+ FROM [PortfolioProject].[dbo].[CovidDeaths] death
+ JOIN [PortfolioProject].[dbo].[CovidVaccinations] vaccin
+    ON death.location = vaccin.location
+    AND death.date = vaccin.date 
+ WHERE death.continent is not null 
+    AND vaccin.new_vaccinations is not null
+
